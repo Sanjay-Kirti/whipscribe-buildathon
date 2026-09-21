@@ -83,7 +83,7 @@ Tick what is true of this PR:
 - [ ] It has real users and reviews, and I have answered some
 - [ ] I shipped an update that fixed a crash or a review complaint
 - [ ] I handled store review, signing and release myself
-- [x] I can say what I would do differently next time
+- [ ] I can say what I would do differently next time
 
 Store links:
 
@@ -105,8 +105,8 @@ NA
 
 ### Ownership and teamwork
 
-- [x] I linked repos where the commit history is mine, not a fork's
-- [x] One of them is a complex project I owned from start to finish
+- [ ] I linked repos where the commit history is mine, not a fork's
+- [ ] One of them is a complex project I owned from start to finish
 - [ ] I have reviewed others' pull requests or answered their issues, and can point to it
 - [x] I have shipped work alongside a team, and can say what I did and what they did
 - [x] I have won a hackathon (link the entry and the result)
