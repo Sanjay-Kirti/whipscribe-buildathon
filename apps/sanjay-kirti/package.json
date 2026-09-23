@@ -1,0 +1,47 @@
+{
+  "name": "whipscribe-desktop",
+  "version": "1.0.0",
+  "description": "WhipScribe Track 2 Desktop App - Meeting recorder with calendar integration",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build:main": "tsc --project tsconfig.main.json",
+    "build:preload": "tsc --project tsconfig.preload.json",
+    "build:renderer": "webpack --mode production",
+    "build": "npm run build:main && npm run build:preload && npm run build:renderer",
+    "dev:renderer": "webpack serve --mode development --port 8080",
+    "dev": "npm run build:main && npm run build:preload && NODE_ENV=development electron .",
+    "start": "npm run build && electron .",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "whipscribe",
+    "electron",
+    "meeting-recorder",
+    "transcription"
+  ],
+  "author": "Sanjay Kirti",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "electron": "^44.4.5",
+    "form-data-encoder": "^4.1.0",
+    "formdata-node": "^6.0.3",
+    "keytar": "^7.9.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "css-loader": "^7.1.5",
+    "esbuild-loader": "^4.5.0",
+    "html-webpack-plugin": "^5.6.8",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.6.2",
+    "typescript": "^7.0.2",
+    "webpack": "^5.111.1",
+    "webpack-cli": "^7.2.3",
+    "webpack-dev-server": "^6.0.0"
+  }
+}
