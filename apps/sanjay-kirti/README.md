@@ -28,7 +28,7 @@ The app uses ScreenCaptureKit for system audio capture, which requires macOS 15 
 - macOS 15.0+ (Sequoia)
 - Node.js 18+
 - WhipScribe account and API key (get from [whipscribe.com/account](https://whipscribe.com/account))
-- Google Cloud OAuth credentials with Calendar API enabled
+- Google Cloud OAuth credentials with Calendar API enabled (see Google Calendar setup below)
 
 ## Setup
 
@@ -42,11 +42,33 @@ The app uses ScreenCaptureKit for system audio capture, which requires macOS 15 
    npm install
    ```
 
-3. **Configure environment (optional for now):**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your actual credentials when implementing features
-   ```
+3. **Configure Google Calendar (required):**
+   
+   a. Create a Google Cloud project:
+      - Go to [Google Cloud Console](https://console.cloud.google.com/)
+      - Create a new project or select an existing one
+      - Enable the Google Calendar API:
+        - Navigate to "APIs & Services" → "Library"
+        - Search for "Google Calendar API"
+        - Click "Enable"
+   
+   b. Create OAuth 2.0 credentials:
+      - Go to "APIs & Services" → "Credentials"
+      - Click "Create Credentials" → "OAuth client ID"
+      - Select "Desktop app" as the application type
+      - Name your OAuth client (e.g., "WhipScribe Desktop")
+      - Click "Create"
+      - Download the JSON or copy the client ID and client secret
+   
+   c. Configure the app:
+      ```bash
+      cp .env.example .env
+      ```
+      Edit `.env` and add your credentials:
+      ```
+      GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+      GOOGLE_CLIENT_SECRET=your-client-secret
+      ```
 
 4. **Build the application:**
    ```bash
@@ -57,6 +79,68 @@ The app uses ScreenCaptureKit for system audio capture, which requires macOS 15 
    ```bash
    npm start
    ```
+
+## Google Calendar
+
+### OAuth Flow
+
+The app uses the standard OAuth 2.0 authorization code flow with PKCE for desktop applications:
+
+1. User clicks "Connect Google Calendar"
+2. App starts a local HTTP server on `http://127.0.0.1:<random-port>/callback`
+3. System browser opens to Google's authorization page
+4. User authenticates and grants calendar read permission
+5. Google redirects back to the local server with an authorization code
+6. App exchanges the code for access and refresh tokens
+7. Tokens are stored securely in macOS Keychain via `keytar`
+
+### Credentials Storage
+
+- **Access tokens:** macOS Keychain (service: `whipscribe-desktop`, account: `google-access-token`)
+- **Refresh tokens:** macOS Keychain (service: `whipscribe-desktop`, account: `google-refresh-token`)
+- **Token expiry:** macOS Keychain (service: `whipscribe-desktop`, account: `google-token-expiry`)
+
+Tokens are automatically refreshed when they expire (5-minute buffer before expiration).
+
+### Disconnecting
+
+To disconnect Google Calendar:
+1. Click "Disconnect" in the app header (when connected)
+2. This removes tokens from the macOS Keychain
+3. To fully revoke access, visit [Google Account Permissions](https://myaccount.google.com/permissions)
+
+### API Usage
+
+The app fetches:
+- **Primary calendar only** (not all calendars)
+- **Next 7 days** of events
+- **Maximum 10 events** per request
+- **Timed events only** (all-day events are included but displayed differently)
+- **Confirmed and tentative events** (cancelled events are filtered out)
+
+Event data includes:
+- Title, start time, end time
+- Location (if present)
+- Meeting links (Google Meet, Zoom, Teams, Webex automatically detected)
+- Conference provider information
+
+### Troubleshooting
+
+**"Calendar service not configured"**
+- Ensure `.env` file exists with valid `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+- Restart the app after adding credentials
+
+**"Authentication expired. Please reconnect."**
+- Your refresh token is invalid or expired
+- Click "Reconnect Calendar" or disconnect and connect again
+
+**"OAuth error: access_denied"**
+- You denied calendar access in the Google consent screen
+- Try connecting again and click "Allow"
+
+**Browser window didn't open**
+- Check if your default browser is set correctly
+- Try manually opening the authorization URL from the console logs
 
 ## Development
 
@@ -106,12 +190,20 @@ apps/sanjay-kirti/
 - Webpack bundler for renderer
 - Native Swift recorder binaries integrated (`fixed-recorder`, `recover-session`)
 - Development and production build scripts
+- **Google Calendar integration:**
+  - OAuth 2.0 with PKCE (loopback redirect)
+  - Secure token storage in macOS Keychain
+  - Automatic token refresh
+  - Upcoming events display (next 7 days)
+  - Meeting link detection (Google Meet, Zoom, Teams, Webex)
+  - All connection states (disconnected, connecting, connected, error, empty)
+  - Manual refresh
+  - Disconnect/reconnect flow
 
 ## What Does Not Work Yet
 
 The following features are **not yet implemented**:
 
-❌ Google Calendar integration
 ❌ Recording controls and UI
 ❌ Recording session management
 ❌ Transcription via WhipScribe API
@@ -119,10 +211,9 @@ The following features are **not yet implemented**:
 ❌ Library management via MCP
 ❌ Crash recovery UI
 ❌ Settings panel
-❌ Empty/loading/error states
 ❌ Keyboard shortcuts
 ❌ System notifications
-❌ Production UX polish
+❌ Production UX polish (animations, transitions, advanced error handling)
 
 ## Native Recorder
 
@@ -173,4 +264,4 @@ Built for WhipScribe Buildathon Track 2
 
 ---
 
-**Track 2 Status:** Scaffold complete, feature implementation pending
+**Track 2 Status:** Step 1 complete (scaffold), Step 2 complete (Google Calendar), Steps 3-5 pending (recording → transcription → library → polish)
