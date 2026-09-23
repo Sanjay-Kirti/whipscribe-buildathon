@@ -41,11 +41,13 @@ const path_1 = __importDefault(require("path"));
 const dotenv = __importStar(require("dotenv"));
 const GoogleOAuthService_1 = require("./calendar/GoogleOAuthService");
 const GoogleCalendarClient_1 = require("./calendar/GoogleCalendarClient");
+const RecordingService_1 = require("./recording/RecordingService");
 // Load environment variables
 dotenv.config();
 let mainWindow = null;
 let oauthService = null;
 let calendarClient = null;
+let recordingService = null;
 function createWindow() {
     mainWindow = new electron_1.BrowserWindow({
         width: 1200,
@@ -82,6 +84,15 @@ function initializeCalendarServices() {
         scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
     });
     calendarClient = new GoogleCalendarClient_1.GoogleCalendarClient(oauthService);
+}
+function initializeRecordingService() {
+    recordingService = new RecordingService_1.RecordingService();
+    // Forward recording status changes to renderer
+    recordingService.on('status-change', (session) => {
+        if (mainWindow) {
+            mainWindow.webContents.send('recording:statusChange', session);
+        }
+    });
 }
 function setupCalendarIPC() {
     // Check if authenticated
@@ -157,9 +168,98 @@ function setupCalendarIPC() {
         }
     });
 }
+function setupRecordingIPC() {
+    // Start recording
+    electron_1.ipcMain.handle('recording:start', async (_event, mode, meetingId, meetingTitle) => {
+        if (!recordingService) {
+            throw new Error('Recording service not initialized');
+        }
+        try {
+            return await recordingService.startRecording(mode, meetingId, meetingTitle);
+        }
+        catch (error) {
+            console.error('Error starting recording:', error);
+            throw error;
+        }
+    });
+    // Stop recording
+    electron_1.ipcMain.handle('recording:stop', async () => {
+        if (!recordingService) {
+            throw new Error('Recording service not initialized');
+        }
+        try {
+            return await recordingService.stopRecording();
+        }
+        catch (error) {
+            console.error('Error stopping recording:', error);
+            throw error;
+        }
+    });
+    // Get current session
+    electron_1.ipcMain.handle('recording:getCurrentSession', async () => {
+        if (!recordingService) {
+            return null;
+        }
+        return recordingService.getCurrentSession();
+    });
+    // Find interrupted sessions
+    electron_1.ipcMain.handle('recording:findInterruptedSessions', async () => {
+        if (!recordingService) {
+            return [];
+        }
+        try {
+            return await recordingService.findInterruptedSessions();
+        }
+        catch (error) {
+            console.error('Error finding interrupted sessions:', error);
+            return [];
+        }
+    });
+    // Recover session
+    electron_1.ipcMain.handle('recording:recoverSession', async (_event, sessionDir, outputPath) => {
+        if (!recordingService) {
+            throw new Error('Recording service not initialized');
+        }
+        try {
+            return await recordingService.recoverSession(sessionDir, outputPath);
+        }
+        catch (error) {
+            console.error('Error recovering session:', error);
+            throw error;
+        }
+    });
+    // Discard session
+    electron_1.ipcMain.handle('recording:discardSession', async (_event, sessionDir) => {
+        if (!recordingService) {
+            throw new Error('Recording service not initialized');
+        }
+        try {
+            await recordingService.discardSession(sessionDir);
+        }
+        catch (error) {
+            console.error('Error discarding session:', error);
+            throw error;
+        }
+    });
+    // Check permissions
+    electron_1.ipcMain.handle('recording:checkPermissions', async () => {
+        if (!recordingService) {
+            return { microphone: false, screenRecording: false };
+        }
+        try {
+            return await recordingService.checkPermissions();
+        }
+        catch (error) {
+            console.error('Error checking permissions:', error);
+            return { microphone: false, screenRecording: false };
+        }
+    });
+}
 electron_1.app.whenReady().then(() => {
     initializeCalendarServices();
+    initializeRecordingService();
     setupCalendarIPC();
+    setupRecordingIPC();
     createWindow();
     electron_1.app.on('activate', () => {
         if (electron_1.BrowserWindow.getAllWindows().length === 0) {
@@ -173,8 +273,11 @@ electron_1.app.on('window-all-closed', () => {
     }
 });
 electron_1.app.on('will-quit', () => {
-    // Cleanup OAuth service
+    // Cleanup services
     if (oauthService) {
         oauthService.cleanup();
+    }
+    if (recordingService) {
+        recordingService.destroy();
     }
 });

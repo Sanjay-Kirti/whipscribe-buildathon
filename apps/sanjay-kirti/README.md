@@ -142,6 +142,133 @@ Event data includes:
 - Check if your default browser is set correctly
 - Try manually opening the authorization URL from the console logs
 
+## Recording
+
+### Recording Modes
+
+The app supports three recording modes:
+
+- **System Audio:** Records system/application audio only (meetings, videos, music)
+- **Microphone:** Records microphone input only
+- **Both:** Records system audio and microphone simultaneously (two separate tracks)
+
+All recordings use AAC audio at 48kHz stereo.
+
+### macOS Requirements
+
+**macOS 15.0+ (Sequoia) required**
+
+The app uses ScreenCaptureKit for audio capture, which requires:
+
+1. **Microphone Permission**
+   - Automatically requested when starting microphone recording
+   - Grant permission in System Settings → Privacy & Security → Microphone
+
+2. **Screen Recording Permission**
+   - Required for system audio capture
+   - Grant permission in System Settings → Privacy & Security → Screen Recording
+   - Add WhipScribe Desktop to the list and enable it
+   - **Restart the app after granting permission**
+
+### Recording Process
+
+1. Select a recording mode (System Audio, Microphone, or Both)
+2. Optionally select an upcoming calendar meeting
+3. Click "Start Recording"
+4. Recording begins with 5-second chunk rotation
+5. Recording time is displayed
+6. Click "Stop Recording" when finished
+7. App finalizes and reconstructs the recording from chunks
+8. Final recording saved to `~/Library/Application Support/whipscribe-desktop/recordings/`
+
+### Chunk-Based Architecture
+
+The native recorder uses a **5-second chunk rotation** strategy:
+
+- Audio is written to sequential chunk files: `000001.m4a`, `000002.m4a`, etc.
+- Each chunk is finalized before the next begins
+- Chunks persist in `/tmp/whipscribe-recordings/<session-id>/chunks/`
+- Session manifest tracks recording metadata
+- On normal stop, chunks are merged into final recording
+
+**Benefits:**
+- Maximum ~5 seconds of data loss on crash
+- Automatic crash recovery possible
+- No corruption of already-written chunks
+
+### Crash Recovery
+
+If the app crashes or is force-quit during recording:
+
+1. Relaunch the app
+2. Recovery modal appears automatically
+3. Review interrupted session details:
+   - Meeting name (if any)
+   - Recording mode
+   - Estimated duration
+   - Start time
+4. Choose:
+   - **Recover Recording:** Validates and reconstructs chunks into playable recording
+   - **Discard:** Permanently deletes the interrupted session
+
+**Recovery Process:**
+- Validates each chunk for minimum duration (0.1s)
+- Skips corrupted or empty chunks
+- Merges valid chunks sequentially
+- Exports as M4A file
+- Reports recovered duration
+
+### Session Storage
+
+**Active sessions:** `/tmp/whipscribe-recordings/<session-id>/`
+- `chunks/` - Individual audio chunks
+- `manifest.json` - Session metadata
+
+**Completed recordings:** `~/Library/Application Support/whipscribe-desktop/recordings/`
+- `session-<timestamp>.m4a` - Final merged recording
+- `recovered-<timestamp>.m4a` - Recovered recordings
+
+### Known Limitations
+
+- **Maximum recording duration:** 1 hour per session (safety limit)
+- **Chunk duration:** Fixed at 5 seconds (proven stable, not configurable)
+- **Microphone-only mode:** Currently implemented as system audio mode (technical limitation)
+- **No pause/resume:** Recording must be stopped and restarted
+- **No live waveform:** Focus on reliability over visualization
+
+### Troubleshooting
+
+**"Recording service not initialized"**
+- App initialization failed
+- Check console logs for errors
+- Restart the app
+
+**"Recording already in progress"**
+- Stop current recording before starting a new one
+- Check recording status indicator
+
+**"Recorder failed to start within 10 seconds"**
+- Native recorder binary may not have execute permission
+- Check: `ls -l src/main/native/fixed-recorder`
+- If needed: `chmod +x src/main/native/fixed-recorder`
+
+**No system audio captured**
+- Screen Recording permission not granted
+- Go to System Settings → Privacy & Security → Screen Recording
+- Enable WhipScribe Desktop
+- **Restart the app** (permission changes require restart)
+
+**"Output file not created"**
+- Native recorder crashed during finalization
+- Check `/tmp/whipscribe-recordings/` for session chunks
+- May be recoverable on next app launch
+
+**Crash recovery fails**
+- Chunks may be corrupted
+- Session directory: `/tmp/whipscribe-recordings/<session-id>/`
+- Manually inspect chunks with `afinfo`
+- Report issue with console logs
+
 ## Development
 
 ### Available Scripts
@@ -199,21 +326,31 @@ apps/sanjay-kirti/
   - All connection states (disconnected, connecting, connected, error, empty)
   - Manual refresh
   - Disconnect/reconnect flow
+- **Meeting Recording:**
+  - System audio capture (ScreenCaptureKit)
+  - Microphone capture
+  - Combined system + microphone recording
+  - Chunk-based recording (5-second chunks)
+  - Normal stop with finalization
+  - Recording session management
+  - Meeting metadata integration
+  - **Crash recovery:**
+    - Automatic detection of interrupted sessions
+    - Recovery UI on app restart
+    - Chunk validation and reconstruction
+    - Manual discard option
 
 ## What Does Not Work Yet
 
 The following features are **not yet implemented**:
 
-❌ Recording controls and UI
-❌ Recording session management
 ❌ Transcription via WhipScribe API
 ❌ Transcript display (speaker-labeled)
 ❌ Library management via MCP
-❌ Crash recovery UI
 ❌ Settings panel
 ❌ Keyboard shortcuts
 ❌ System notifications
-❌ Production UX polish (animations, transitions, advanced error handling)
+❌ Production UX polish (advanced animations, transitions)
 
 ## Native Recorder
 
@@ -264,4 +401,4 @@ Built for WhipScribe Buildathon Track 2
 
 ---
 
-**Track 2 Status:** Step 1 complete (scaffold), Step 2 complete (Google Calendar), Steps 3-5 pending (recording → transcription → library → polish)
+**Track 2 Status:** Step 1 complete (scaffold), Step 2 complete (Google Calendar), Step 3 complete (Recording + Crash Recovery), Steps 4-5 pending (transcription → library → polish)

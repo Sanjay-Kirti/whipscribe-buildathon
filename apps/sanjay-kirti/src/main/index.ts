@@ -3,6 +3,7 @@ import path from 'path';
 import * as dotenv from 'dotenv';
 import { GoogleOAuthService } from './calendar/GoogleOAuthService';
 import { GoogleCalendarClient } from './calendar/GoogleCalendarClient';
+import { RecordingService } from './recording/RecordingService';
 
 // Load environment variables
 dotenv.config();
@@ -10,6 +11,7 @@ dotenv.config();
 let mainWindow: BrowserWindow | null = null;
 let oauthService: GoogleOAuthService | null = null;
 let calendarClient: GoogleCalendarClient | null = null;
+let recordingService: RecordingService | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -52,6 +54,17 @@ function initializeCalendarServices(): void {
   });
 
   calendarClient = new GoogleCalendarClient(oauthService);
+}
+
+function initializeRecordingService(): void {
+  recordingService = new RecordingService();
+
+  // Forward recording status changes to renderer
+  recordingService.on('status-change', (session) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('recording:statusChange', session);
+    }
+  });
 }
 
 function setupCalendarIPC(): void {
@@ -129,9 +142,106 @@ function setupCalendarIPC(): void {
   });
 }
 
+function setupRecordingIPC(): void {
+  // Start recording
+  ipcMain.handle('recording:start', async (_event, mode, meetingId, meetingTitle) => {
+    if (!recordingService) {
+      throw new Error('Recording service not initialized');
+    }
+
+    try {
+      return await recordingService.startRecording(mode, meetingId, meetingTitle);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      throw error;
+    }
+  });
+
+  // Stop recording
+  ipcMain.handle('recording:stop', async () => {
+    if (!recordingService) {
+      throw new Error('Recording service not initialized');
+    }
+
+    try {
+      return await recordingService.stopRecording();
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+      throw error;
+    }
+  });
+
+  // Get current session
+  ipcMain.handle('recording:getCurrentSession', async () => {
+    if (!recordingService) {
+      return null;
+    }
+
+    return recordingService.getCurrentSession();
+  });
+
+  // Find interrupted sessions
+  ipcMain.handle('recording:findInterruptedSessions', async () => {
+    if (!recordingService) {
+      return [];
+    }
+
+    try {
+      return await recordingService.findInterruptedSessions();
+    } catch (error) {
+      console.error('Error finding interrupted sessions:', error);
+      return [];
+    }
+  });
+
+  // Recover session
+  ipcMain.handle('recording:recoverSession', async (_event, sessionDir, outputPath) => {
+    if (!recordingService) {
+      throw new Error('Recording service not initialized');
+    }
+
+    try {
+      return await recordingService.recoverSession(sessionDir, outputPath);
+    } catch (error) {
+      console.error('Error recovering session:', error);
+      throw error;
+    }
+  });
+
+  // Discard session
+  ipcMain.handle('recording:discardSession', async (_event, sessionDir) => {
+    if (!recordingService) {
+      throw new Error('Recording service not initialized');
+    }
+
+    try {
+      await recordingService.discardSession(sessionDir);
+    } catch (error) {
+      console.error('Error discarding session:', error);
+      throw error;
+    }
+  });
+
+  // Check permissions
+  ipcMain.handle('recording:checkPermissions', async () => {
+    if (!recordingService) {
+      return { microphone: false, screenRecording: false };
+    }
+
+    try {
+      return await recordingService.checkPermissions();
+    } catch (error) {
+      console.error('Error checking permissions:', error);
+      return { microphone: false, screenRecording: false };
+    }
+  });
+}
+
 app.whenReady().then(() => {
   initializeCalendarServices();
+  initializeRecordingService();
   setupCalendarIPC();
+  setupRecordingIPC();
   createWindow();
 
   app.on('activate', () => {
@@ -148,8 +258,11 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
-  // Cleanup OAuth service
+  // Cleanup services
   if (oauthService) {
     oauthService.cleanup();
+  }
+  if (recordingService) {
+    recordingService.destroy();
   }
 });
